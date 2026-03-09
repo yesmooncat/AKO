@@ -1,0 +1,13 @@
+{
+  "HOW_TO_USE_THIS_TRACKER": [
+    "1) Tap a project on the main screen to open its tasks.",
+    "2) On the Tasks screen you can see Task cards with Status, Owner, Reviewer, Priority, Deadline.",
+    "3) Tap a Task card to open Task Details.",
+    "4) Update Status and Comment right in Task Details.",
+    "5) Use “Add Update” inside the task to leave chat-style progress notes.",
+    "6) Add Dropbox links for files directly to the task.",
+    "7) New Task IDs follow the pattern TASK-XXX.",
+    "8) Owners deliver / change status; Reviewers approve or leave feedback.",
+    "9) Keep Tasks updated so automation and notifications work."
+  ]
+}
