@@ -1,0 +1,23 @@
+[
+  {
+    "id": "update-001",
+    "task_id": "task-001",
+    "date": "2026-03-09",
+    "author": "Vika",
+    "comment": "Initial task created. Waiting for Dropbox links."
+  },
+  {
+    "id": "update-002",
+    "task_id": "task-003",
+    "date": "2026-03-09",
+    "author": "Natasha",
+    "comment": "Reviewed initial poster drafts, some adjustments needed."
+  },
+  {
+    "id": "update-003",
+    "task_id": "task-007",
+    "date": "2026-03-09",
+    "author": "Artyom",
+    "comment": "Checked Sport Set Woman files, all clear."
+  }
+]
