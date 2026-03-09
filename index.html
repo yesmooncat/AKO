@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Tracker</title>
+<style>
+  body { background-color: #121212; color: #fff; font-family: Arial, sans-serif; margin:0; padding:0; }
+  h2 { text-align:center; padding:10px; }
+  .tab { display:none; }
+  .tab.active { display:block; }
+  .tabs { display:flex; overflow-x:auto; background:#1e1e1e; }
+  .tabs button { background:#1e1e1e; color:#fff; border:none; padding:10px 15px; cursor:pointer; font-size:14px; flex:0 0 auto; }
+  .tabs button.active { background:#3399ff; }
+  table { width:100%; border-collapse: collapse; font-size:14px; }
+  th, td { border:1px solid #333; padding:6px; text-align:left; }
+  th { background:#1e1e1e; position:sticky; top:0; z-index:1; }
+  tr.not-relevant { color:#777; }
+  a { color:#3399ff; text-decoration:underline; }
+  select, input, textarea { background:#222; color:#fff; border:1px solid #555; padding:4px; font-size:14px; }
+  .btn { background:#3399ff; color:#fff; border:none; padding:5px 10px; cursor:pointer; font-size:14px; margin:2px; }
+  .btn:hover { background:#1e88e5; }
+  .modal { display:none; position:fixed; z-index:10; left:0; top:0; width:100%; height:100%; overflow:auto; background:rgba(0,0,0,0.9); }
+  .modal-content { background:#1e1e1e; margin:10% auto; padding:20px; border:1px solid #888; width:90%; color:#fff; }
+  @media (max-width:600px){ table, th, td { font-size:12px; } th, td { padding:4px; } }
+</style>
+</head>
+<body>
+
+<h2>Project Tracker</h2>
+
+<div class="tabs">
+  <button class="tablink active" data-tab="Projects">Projects</button>
+  <button class="tablink" data-tab="Tasks">Tasks</button>
+  <button class="tablink" data-tab="People">People</button>
+  <button class="tablink" data-tab="Files">Files</button>
+  <button class="tablink" data-tab="Updates">Updates</button>
+  <button class="tablink" data-tab="Instructions">Instructions</button>
+</div>
+
+<div id="Projects" class="tab active">
+  <table id="projectsTable">
+    <thead>
+      <tr>
+        <th>Project</th>
+        <th>Description</th>
+        <th>Status</th>
+        <th>Start Date</th>
+        <th>Owner</th>
+        <th>Dropbox Folder</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div id="Tasks" class="tab">
+  <div style="padding:10px; display:flex; flex-wrap:wrap; gap:10px;">
+    <label>Project: <select id="filterProject"></select></label>
+    <label>Status: <select id="filterStatus"></select></label>
+    <label>Owner: <select id="filterOwner"></select></label>
+    <label>Reviewer: <select id="filterReviewer"></select></label>
+    <label>Priority: <select id="filterPriority"></select></label>
+    <button class="btn" onclick="addTask()">Add Task</button>
+    <button class="btn" onclick="saveChanges()">Save</button>
+  </div>
+  <table id="tasksTable">
+    <thead>
+      <tr>
+        <th style="width:50px; font-size:12px;">Task ID</th>
+        <th style="width:50px; font-size:12px;">Project</th>
+        <th>Task Name</th>
+        <th>Owner</th>
+        <th>Reviewer</th>
+        <th>Status</th>
+        <th>Priority</th>
+        <th>Deadline</th>
+        <th>Dropbox Link</th>
+        <th>Comment</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div id="People" class="tab"><table id="peopleTable"><thead><tr><th>Name</th><th>Role</th><th>Telegram</th><th>Email</th><th>Responsibility</th></tr></thead><tbody></tbody></table></div>
+<div id="Files" class="tab"><table id="filesTable"><thead><tr><th>Project</th><th>File Name</th><th>File Type</th><th>Dropbox Link</th><th>Related Task ID</th></tr></thead><tbody></tbody></table></div>
+<div id="Updates" class="tab"><table id="updatesTable"><thead><tr><th>Task ID</th><th>Author</th><th>Message</th><th>Timestamp</th></tr></thead><tbody></tbody></table></div>
+<div id="Instructions" class="tab"><pre id="instructionsText" style="padding:10px;"></pre></div>
+
+<div id="updateModal" class="modal">
+  <div class="modal-content">
+    <h3>Updates for Task: <span id="modalTaskID"></span></h3>
+    <div id="updatesList" style="max-height:300px; overflow-y:auto; margin-bottom:10px;"></div>
+    <label>Author: <select id="updateAuthor"></select> or <input type="text" id="manualAuthor" placeholder="Your name"></label><br><br>
+    <textarea id="updateMessage" placeholder="Enter comment..." rows="3" style="width:100%; background:#222; color:#fff;"></textarea><br><br>
+    <button class="btn" onclick="addUpdate()">Add Comment</button>
+    <button class="btn" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+const SHEET_ID = "1GyvpnccBQF0AXroVtncqMMcyTQL70quOBq9MktIUf2s";
+const TABS = ["Projects","Tasks","People","Files","Updates","Instructions"];
+let tasks=[],projects=[],people=[],updates=[];
+
+document.querySelectorAll(".tablink").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
+  document.querySelectorAll(".tablink").forEach(tb=>tb.classList.remove("active"));
+  document.getElementById(b.dataset.tab).classList.add("active");
+  b.classList.add("active");
+});
+
+async function fetchSheet(sheetName){
+  const url=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+  const res=await fetch(url);
+  const text=await res.text();
+  const json=JSON.parse(text.match(/.*google\.visualization\.Query\.setResponse\((.*)\);/s)[1]);
+  return json.table.rows.map(r=>r.c.map(cell=>cell?cell.v:""));
+}
+
+async function loadData(){
+  projects=await fetchSheet("Projects");
+  tasks=await fetchSheet("Tasks");
+  people=await fetchSheet("People");
+  updates=await fetchSheet("Updates");
+  populateFilters();
+  renderTasks();
+  populateAuthors();
+}
+
+function fillSelect(id, values){
+  const sel=document.getElementById(id);
+  sel.innerHTML="<option value=''>All</option>";
+  values.forEach(v=>{const opt=document.createElement("option"); opt.value=v; opt.textContent=v; sel.appendChild(opt);});
+}
+
+function populateFilters(){
+  fillSelect("filterProject",[...new Set(tasks.map(t=>t[1]))]);
+  fillSelect("filterStatus",[...new Set(tasks.map(t=>t[5]))]);
+  fillSelect("filterOwner",[...new Set(tasks.map(t=>t[3]))]);
+  fillSelect("filterReviewer",[...new Set(tasks.map(t=>t[4]))]);
+  fillSelect("filterPriority",[...new Set(tasks.map(t=>t[6]))]);
+}
+
+function renderTasks(){
+  const tbody=document.querySelector("#tasksTable tbody");
+  tbody.innerHTML="";
+  tasks.forEach(t=>{
+    const tr=document.createElement("tr");
+    if(t[5]=="Not Relevant") tr.classList.add("not-relevant");
+    tr.innerHTML=`
+      <td style="font-size:12px;">${t[0]}</td>
+      <td style="font-size:12px;">${t[1]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',2,this.textContent)">${t[2]}</td>
+      <td><select onchange="editTask('${t[0]}',3,this.value)">${people.map(p=>`<option ${p[0]==t[3]?'selected':''}>${p[0]}</option>`).join("")}</select></td>
+      <td><select onchange="editTask('${t[0]}',4,this.value)">${people.map(p=>`<option ${p[0]==t[4]?'selected':''}>${p[0]}</option>`).join("")}</select></td>
+      <td><select onchange="editTask('${t[0]}',5,this.value)">
+        <option ${t[5]=="To Do"?'selected':''}>To Do</option>
+        <option ${t[5]=="In Progress"?'selected':''}>In Progress</option>
+        <option ${t[5]=="Done"?'selected':''}>Done</option>
+        <option ${t[5]=="Not Relevant"?'selected':''}>Not Relevant</option>
+        <option ${t[5]=="Overdue"?'selected':''}>Overdue</option>
+      </select></td>
+      <td><select onchange="editTask('${t[0]}',6,this.value)">
+        <option ${t[6]=="High"?'selected':''}>High</option>
+        <option ${t[6]=="Medium"?'selected':''}>Medium</option>
+        <option ${t[6]=="Low"?'selected':''}>Low</option>
+      </select></td>
+      <td><input type="date" value="${t[7]||''}" onchange="editTask('${t[0]}',7,this.value)"></td>
+      <td><a href="${t[8]||'https://google.com'}" target="_blank">${t[8]||'https://google.com'}</a></td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',9,this.textContent)">${t[9]}</td>
+      <td><button class="btn" onclick="openModal('${t[0]}')">Comment</button>
+          <button class="btn" onclick="deleteTask('${t[0]}')">Delete</button></td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function editTask(taskID,col,value){
+  const task=tasks.find(t=>t[0]==taskID);
+  task[col]=value;
+  logUpdate(taskID,`Edited column ${col}: ${value}`);
+}
+
+function addTask(){
+  const newID='TASK-'+String(tasks.length+1).padStart(3,'0');
+  tasks.push([newID,'','', '', '', 'To Do','Medium','','https://google.com','']);
+  renderTasks();
+  logUpdate(newID,"Task added");
+}
+
+let currentTaskID=null;
+function openModal(taskID){
+  currentTaskID=taskID;
+  document.getElementById("modalTaskID").textContent=taskID;
+  const list=document.getElementById("updatesList");
+  list.innerHTML="";
+  updates.filter(u=>u[0]==taskID).forEach(u=>{
+    const div=document.createElement("div");
+    div.textContent=`[${u[3]}] ${u[1]}: ${u[2]}`;
+    list.appendChild(div);
+  });
+  document.getElementById("updateModal").style.display="block";
+}
+function closeModal(){document.getElementById("updateModal").style.display="none";}
+
+function populateAuthors(){
+  const sel=document.getElementById("updateAuthor");
+  sel.innerHTML="";
+  people.forEach(p=>{const opt=document.createElement("option"); opt.value=p[0]; opt.textContent=p[0]; sel.appendChild(opt);});
+}
+
+function addUpdate(){
+  const author=document.getElementById("manualAuthor").value||document.getElementById("updateAuthor").value;
+  const msg=document.getElementById("updateMessage").value;
+  if(!author||!msg)return alert("Enter author and message");
+  const now=new Date().toISOString();
+  updates.push([currentTaskID,author,msg,now]);
+  logUpdate(currentTaskID,msg,author);
+  document.getElementById("updateMessage").value="";
+  openModal(currentTaskID);
+}
+
+function deleteTask(taskID){
+  if(!confirm("Are you sure you want to delete this task?")) return;
+  tasks=tasks.filter(t=>t[0]!=taskID);
+  logUpdate(taskID,"Task deleted");
+  renderTasks();
+}
+
+function logUpdate(taskID,message,author="System"){
+  const now=new Date().toISOString();
+  updates.push([taskID,author,message,now]);
+}
+
+document.querySelectorAll("#filterProject, #filterStatus, #filterOwner, #filterReviewer, #filterPriority")
+.forEach(s=>s.onchange=renderTasks);
+
+function saveChanges(){
+  alert("Save function placeholder – connect to Google Sheets API");
+}
+
+loadData();
+</script>
+</body>
+</html>
