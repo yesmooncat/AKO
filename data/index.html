@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>AKO Tasks</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f5f5f5;
+padding:20px;
+}
+
+.task{
+background:white;
+border-radius:10px;
+padding:15px;
+margin-bottom:12px;
+box-shadow:0 2px 6px rgba(0,0,0,0.1);
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h1>AKO Tasks</h1>
+
+<div id="tasks"></div>
+
+<script>
+
+let tasks = [];
+
+fetch("https://raw.githubusercontent.com/yesmooncat/AKO/main/data/tasks.json")
+.then(r => r.json())
+.then(data => {
+
+tasks = data;
+
+render();
+
+});
+
+function render(){
+
+const container = document.getElementById("tasks");
+
+container.innerHTML = "";
+
+tasks.forEach(t => {
+
+const div = document.createElement("div");
+
+div.className = "task";
+
+div.innerHTML = `
+<b>${t.Task_Name}</b><br>
+Project: ${t.Project}<br>
+Status: ${t.Status}<br>
+Owner: ${t.Owner}<br>
+Reviewer: ${t.Reviewer}<br>
+Deadline: ${t.Deadline}
+`;
+
+container.appendChild(div);
+
+});
+
+}
+
+</script>
+
+</body>
+</html>
