@@ -1,0 +1,18 @@
+[
+  {
+    "id": "project-001",
+    "name": "AKO: Season 2026 / Event 1 - AKO 13",
+    "description": "All tasks related to AKO 13 event for Season 2026",
+    "owner": "Vika",
+    "deadline": "2026-03-20",
+    "status": "active"
+  },
+  {
+    "id": "project-002",
+    "name": "HOF: Season 2026 / Event 1",
+    "description": "Hall of Fame project for Season 2026, Event 1",
+    "owner": "",
+    "deadline": "",
+    "status": "active"
+  }
+]
