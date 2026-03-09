@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project Tracker</title>
+<style>
+  body { background-color:#121212; color:#fff; font-family:Arial,sans-serif; margin:0; padding:0; }
+  h2 { text-align:center; padding:10px; }
+  .tabs { display:flex; background:#1e1e1e; overflow-x:auto; }
+  .tab { flex:1; padding:10px; text-align:center; cursor:pointer; color:#ccc; border-bottom:2px solid transparent; }
+  .tab.active { color:#fff; border-bottom:2px solid #3399ff; }
+  .tab-content { display:none; padding:10px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { border:1px solid #333; padding:6px; text-align:left; }
+  th { background:#1e1e1e; position:sticky; top:0; z-index:1; }
+  tr.not-relevant { color:#777; }
+  a { color:#3399ff; text-decoration:underline; }
+  select,input,textarea { background:#222; color:#fff; border:1px solid #555; padding:4px; font-size:14px; }
+  .btn { background:#3399ff; color:#fff; border:none; padding:5px 10px; cursor:pointer; margin:2px; font-size:14px; }
+  .btn:hover { background:#1e88e5; }
+  .modal { display:none; position:fixed; z-index:10; left:0; top:0; width:100%; height:100%; overflow:auto; background:rgba(0,0,0,0.9); }
+  .modal-content { background:#1e1e1e; margin:10% auto; padding:20px; border:1px solid #888; width:90%; color:#fff; }
+  .filters { display:flex; flex-wrap:wrap; gap:5px; padding:5px 0; }
+  .filters label { font-size:12px; }
+  @media(max-width:600px){ table, th, td { font-size:12px; } }
+</style>
+</head>
+<body>
+
+<h2>Project Tracker</h2>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('Projects')">Projects</div>
+  <div class="tab" onclick="showTab('Tasks')">Tasks</div>
+  <div class="tab" onclick="showTab('People')">People</div>
+  <div class="tab" onclick="showTab('Files')">Files</div>
+  <div class="tab" onclick="showTab('Updates')">Updates</div>
+  <div class="tab" onclick="showTab('Instructions')">Instructions</div>
+</div>
+
+<!-- Tab Contents -->
+<div id="Projects" class="tab-content"></div>
+<div id="Tasks" class="tab-content"></div>
+<div id="People" class="tab-content"></div>
+<div id="Files" class="tab-content"></div>
+<div id="Updates" class="tab-content"></div>
+<div id="Instructions" class="tab-content"></div>
+
+<!-- Modal for Task Updates -->
+<div id="updateModal" class="modal">
+  <div class="modal-content">
+    <h3>Updates for Task: <span id="modalTaskID"></span></h3>
+    <div id="updatesList" style="max-height:300px; overflow-y:auto; margin-bottom:10px;"></div>
+    <label>Author: 
+      <select id="updateAuthor"></select> or <input type="text" id="manualAuthor" placeholder="Your name">
+    </label><br><br>
+    <textarea id="updateMessage" placeholder="Enter comment..." rows="3" style="width:100%; background:#222; color:#fff;"></textarea><br><br>
+    <button class="btn" onclick="addUpdate()">Add Comment</button>
+    <button class="btn" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+const SHEET_ID = "1GyvpnccBQF0AXroVtncqMMcyTQL70quOBq9MktIUf2s";
+const TABS = ["Projects","Tasks","People","Files","Updates","Instructions"];
+
+let data = { Projects:[], Tasks:[], People:[], Files:[], Updates:[], Instructions:[] };
+let currentTaskID = null;
+
+// --- Tab Switching ---
+function showTab(name){
+  TABS.forEach(t=>document.getElementById(t).style.display='none');
+  document.getElementById(name).style.display='block';
+  document.querySelectorAll('.tab').forEach(tb=>tb.classList.remove('active'));
+  document.querySelector(`.tab[onclick="showTab('${name}')"]`).classList.add('active');
+}
+
+// --- Fetch Google Sheet ---
+async function fetchSheet(sheetName){
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${sheetName}`;
+  const res = await fetch(url);
+  const text = await res.text();
+  const json = JSON.parse(text.match(/.*google\.visualization\.Query\.setResponse\((.*)\);/s)[1]);
+  return json.table.rows.map(r=>r.c.map(c=>c ? c.v : ""));
+}
+
+// --- Load All Data ---
+async function loadData(){
+  for(const tab of TABS) data[tab] = await fetchSheet(tab);
+  renderProjects();
+  renderTasks();
+  renderPeople();
+  renderFiles();
+  renderUpdates();
+  renderInstructions();
+  populateAuthors();
+  showTab('Projects');
+}
+
+// --- Render Functions ---
+function renderProjects(){
+  const container = document.getElementById('Projects');
+  if(!data.Projects.length){ container.textContent="No Projects"; return; }
+  let html = '<table><thead><tr>';
+  data.Projects[0].forEach(h=>html+=`<th>${h}</th>`);
+  html+='</tr></thead><tbody>';
+  data.Projects.slice(1).forEach(row=>{
+    html+='<tr>';
+    row.forEach(cell=>html+=`<td contenteditable="true">${cell}</td>`);
+    html+='</tr>';
+  });
+  html+='</tbody></table>';
+  container.innerHTML = html;
+}
+
+function renderTasks(){
+  const container = document.getElementById('Tasks');
+  let html = `<div class="filters">
+    <label>Project:<select id="filterProject"></select></label>
+    <label>Status:<select id="filterStatus"></select></label>
+    <label>Owner:<select id="filterOwner"></select></label>
+    <label>Reviewer:<select id="filterReviewer"></select></label>
+    <label>Priority:<select id="filterPriority"></select></label>
+  </div>
+  <button class="btn" onclick="applyFilters()">Apply Filters</button>
+  <button class="btn" onclick="addTask()">Add Task</button>
+  <table id="tasksTable"><thead><tr>`;
+  data.Tasks[0].forEach((h,i)=>{
+    if(i==0) html+='<th style="width:50px">'+h+'</th>';
+    else if(i==1) html+='<th style="width:50px">'+h+'</th>';
+    else html+='<th>'+h+'</th>';
+  });
+  html+='<th>Actions</th></tr></thead><tbody></tbody></table>';
+  container.innerHTML = html;
+  fillFilters();
+  renderTaskRows();
+}
+
+// --- Task Rows ---
+function renderTaskRows(){
+  const tbody = document.querySelector("#tasksTable tbody");
+  tbody.innerHTML="";
+  data.Tasks.slice(1).forEach(t=>{
+    const tr = document.createElement("tr");
+    if(t[5]=="Not Relevant") tr.classList.add("not-relevant");
+    tr.innerHTML=`
+      <td>${t[0]}</td>
+      <td>${t[1]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',2,this.textContent)">${t[2]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',3,this.textContent)">${t[3]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',4,this.textContent)">${t[4]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',5,this.textContent)">${t[5]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',6,this.textContent)">${t[6]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',7,this.textContent)">${t[7]}</td>
+      <td><a href="${t[8]||'https://google.com'}" target="_blank">${t[8]||'https://google.com'}</a></td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',9,this.textContent)">${t[9]}</td>
+      <td>
+        <button class="btn" onclick="openModal('${t[0]}')">Updates</button>
+        <button class="btn" onclick="deleteTask('${t[0]}')">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+// --- Edit Task ---
+function editTask(taskID,col,value){
+  const row = data.Tasks.find(r=>r[0]==taskID);
+  if(row){ row[col]=value; logUpdate(taskID,`Edited column ${col}: ${value}`); }
+}
+
+// --- Add Task ---
+function addTask(){
+  const newID = 'TASK-'+(data.Tasks.length).toString().padStart(3,'0');
+  const newTask = [newID,'','New Task','','','To Do','Medium','','https://google.com',''];
+  data.Tasks.push(newTask);
+  logUpdate(newID,'Task added');
+  renderTaskRows();
+}
+
+// --- Delete Task ---
+function deleteTask(taskID){
+  if(!confirm("Are you sure you want to delete this task?")) return;
+  data.Tasks = data.Tasks.filter(t=>t[0]!=taskID);
+  logUpdate(taskID,"Task deleted");
+  renderTaskRows();
+}
+
+// --- Filters ---
+function fillFilters(){
+  const map=(id,idx)=>{const sel=document.getElementById(id); sel.innerHTML="<option value=''>All</option>"; new Set(data.Tasks.slice(1).map(r=>r[idx])).forEach(v=>{const o=document.createElement("option");o.value=v;o.textContent=v;sel.appendChild(o);}); };
+  map("filterProject",1); map("filterStatus",5); map("filterOwner",3); map("filterReviewer",4); map("filterPriority",6);
+}
+
+function applyFilters(){
+  const f={Project:document.getElementById("filterProject").value,Status:document.getElementById("filterStatus").value,
+           Owner:document.getElementById("filterOwner").value,Reviewer:document.getElementById("filterReviewer").value,
+           Priority:document.getElementById("filterPriority").value};
+  const tbody = document.querySelector("#tasksTable tbody"); tbody.innerHTML="";
+  data.Tasks.slice(1).forEach(t=>{
+    if(f.Project && t[1]!=f.Project) return;
+    if(f.Status && t[5]!=f.Status) return;
+    if(f.Owner && t[3]!=f.Owner) return;
+    if(f.Reviewer && t[4]!=f.Reviewer) return;
+    if(f.Priority && t[6]!=f.Priority) return;
+    const tr = document.createElement("tr"); if(t[5]=="Not Relevant") tr.classList.add("not-relevant");
+    tr.innerHTML=`
+      <td>${t[0]}</td><td>${t[1]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',2,this.textContent)">${t[2]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',3,this.textContent)">${t[3]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',4,this.textContent)">${t[4]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',5,this.textContent)">${t[5]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',6,this.textContent)">${t[6]}</td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',7,this.textContent)">${t[7]}</td>
+      <td><a href="${t[8]||'https://google.com'}" target="_blank">${t[8]||'https://google.com'}</a></td>
+      <td contenteditable="true" onblur="editTask('${t[0]}',9,this.textContent)">${t[9]}</td>
+      <td><button class="btn" onclick="openModal('${t[0]}')">Updates</button>
+          <button class="btn" onclick="deleteTask('${t[0]}')">Delete</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// --- Updates ---
+function populateAuthors(){
+  const sel = document.getElementById("updateAuthor"); sel.innerHTML="";
+  data.People.slice(1).forEach(p=>{const opt=document.createElement("option"); opt.value=p[0]; opt.textContent=p[0]; sel.appendChild(opt);});
+}
+
+function openModal(taskID){
+  currentTaskID = taskID;
+  document.getElementById("modalTaskID").textContent = taskID;
+  const list=document.getElementById("updatesList"); list.innerHTML="";
+  data.Updates.slice(1).filter(u=>u[0]==taskID).forEach(u=>{
+    const div=document.createElement("div"); div.textContent=`[${u[3]}] ${u[1]}: ${u[2]}`; list.appendChild(div);
+  });
+  document.getElementById("updateModal").style.display="block";
+}
+
+function closeModal(){ document.getElementById("updateModal").style.display="none"; }
+
+function addUpdate(){
+  const author=document.getElementById("manualAuthor").value || document.getElementById("updateAuthor").value;
+  const msg=document.getElementById("updateMessage").value;
+  if(!author || !msg) return alert("Enter author and message");
+  const now=new Date().toISOString();
+  data.Updates.push([currentTaskID,author,msg,now]);
+  logUpdate(currentTaskID,msg,author);
+  document.getElementById("updateMessage").value="";
+  openModal(currentTaskID);
+}
+
+// --- Log Update ---
+function logUpdate(taskID,message,author="System"){
+  const now=new Date().toISOString();
+  data.Updates.push([taskID,author,message,now]);
+  renderUpdates();
+}
+
+// --- Render Other Tabs ---
+function renderPeople(){
+  const c=document.getElementById("People"); if(!data.People.length){c.textContent="No People"; return;}
+  let html='<table><thead><tr>'; data.People[0].forEach(h=>html+=`<th>${h}</th>`); html+='</tr></thead><tbody>';
+  data.People.slice(1).forEach(r=>{ html+='<tr>'; r.forEach(c=>html+=`<td contenteditable="true">${c}</td>`); html+='</tr>'; });
+  html+='</tbody></table>'; c.innerHTML=html;
+}
+
+function renderFiles(){
+  const c=document.getElementById("Files"); if(!data.Files.length){c.textContent="No Files"; return;}
+  let html='<table><thead><tr>'; data.Files[0].forEach(h=>html+=`<th>${h}</th>`); html+='</tr></thead><tbody>';
+  data.Files.slice(1).forEach(r=>{ html+='<tr>'; r.forEach(c=>html+=`<td contenteditable="true">${c}</td>`); html+='</tr>'; });
+  html+='</tbody></table>'; c.innerHTML=html;
+}
+
+function renderUpdates(){
+  const c=document.getElementById("Updates"); if(!data.Updates.length){c.textContent="No Updates"; return;}
+  let html='<table><thead><tr>'; data.Updates[0].forEach(h=>html+=`<th>${h}</th>`); html+='</tr></thead><tbody>';
+  data.Updates.slice(1).forEach(r=>{ html+='<tr>'; r.forEach(c=>html+=`<td>${c}</td>`); html+='</tr>'; });
+  html+='</tbody></table>'; c.innerHTML=html;
+}
+
+function renderInstructions(){
+  const c=document.getElementById("Instructions"); if(!data.Instructions.length){c.textContent="No Instructions"; return;}
+  let html='<table><thead><tr>'; data.Instructions[0].forEach(h=>html+=`<th>${h}</th>`); html+='</tr></thead><tbody>';
+  data.Instructions.slice(1).forEach(r=>{ html+='<tr>'; r.forEach(c=>html+=`<td>${c}</td>`); html+='</tr>'; });
+  html+='</tbody></table>'; c.innerHTML=html;
+}
+
+// --- Init ---
+loadData();
+</script>
+
+</body>
+</html>
