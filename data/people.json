@@ -1,0 +1,23 @@
+[
+  {
+    "Name": "Vika",
+    "Role": "Owner",
+    "Telegram": "@banzaico",
+    "Email": "4ertovka06@gmail.com",
+    "Responsibility": "Task Owner + Reviewer"
+  },
+  {
+    "Name": "Natasha",
+    "Role": "Reviewer",
+    "Telegram": "@+2348140000009",
+    "Email": "-",
+    "Responsibility": "Reviewer"
+  },
+  {
+    "Name": "Artyom",
+    "Role": "Owner/Reviewer",
+    "Telegram": "@HuttenRU",
+    "Email": "-",
+    "Responsibility": "Owner + Reviewer"
+  }
+]
