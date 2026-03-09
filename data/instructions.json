@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "step": "Create Task",
+    "description": "Click 'New Task', fill in task name, owner, reviewer, project, priority, and deadline."
+  },
+  {
+    "id": 2,
+    "step": "Update Task",
+    "description": "Add comments in the 'Updates' section, change status, attach Dropbox link if needed."
+  },
+  {
+    "id": 3,
+    "step": "Filter Tasks",
+    "description": "Use project or status filters to quickly find tasks."
+  }
+]
