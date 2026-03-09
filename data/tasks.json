@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Task 1",
+    "project": "Project Alpha",
+    "status": "to do",
+    "owner": "Viktoria",
+    "reviewer": "Alex",
+    "priority": "High",
+    "deadline": "2026-03-15",
+    "dropbox": "https://www.dropbox.com/s/example1",
+    "comment": "Initial task setup",
+    "update": "First version",
+    "instruction": "Follow guidelines"
+  },
+  {
+    "name": "Task 2",
+    "project": "Project Beta",
+    "status": "in progress",
+    "owner": "Alex",
+    "reviewer": "Maria",
+    "priority": "Medium",
+    "deadline": "2026-03-20",
+    "dropbox": "https://www.dropbox.com/s/example2",
+    "comment": "",
+    "update": "",
+    "instruction": ""
+  }
+  // ...добавим все остальные задачи из твоего Google Sheets
+]
