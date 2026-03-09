@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ako Tasks Tracker</title>
+<style>
+  body { margin:0; padding:0; font-family: Arial, sans-serif; background:#121212; color:#fff; }
+  h2{ text-align:center; padding:10px; font-size:18px; }
+  .tab-buttons { display:flex; overflow-x:auto; background:#1e1e1e; }
+  .tab-buttons button { flex:0 0 auto; background:#333; color:#fff; border:none; padding:8px 12px; cursor:pointer; }
+  .tab-buttons button.active { background:#3399ff; }
+  .filters { display:flex; flex-wrap:wrap; padding:5px; background:#1e1e1e; }
+  .filters label { margin:5px; font-size:14px; }
+  .filters select, .filters input { background:#222; color:#fff; border:1px solid #555; padding:4px; font-size:14px; }
+  table { width:100%; border-collapse:collapse; font-size:14px; overflow-x:auto; display:block; }
+  th, td { border:1px solid #333; padding:6px; text-align:left; white-space:nowrap; }
+  th { background:#1e1e1e; position:sticky; top:0; z-index:1; font-weight:bold;}
+  tr.not-relevant { color:#777; }
+  a { color:#3399ff; text-decoration:underline; }
+  .btn { background:#3399ff; color:#fff; border:none; padding:5px 8px; cursor:pointer; margin:2px; font-size:14px; }
+  .btn:hover { background:#1e88e5; }
+  .modal { display:none; position:fixed; z-index:10; left:0; top:0; width:100%; height:100%; overflow:auto; background:rgba(0,0,0,0.9);}
+  .modal-content { background:#1e1e1e; margin:10% auto; padding:15px; border:1px solid #888; width:90%; color:#fff; }
+  .small-cell { font-size:12px; width:50px; }
+  .task-name-cell { font-size:15px; width:180px; }
+</style>
+</head>
+<body>
+
+<h2>Ako Tasks Tracker</h2>
+
+<div class="tab-buttons" id="tabButtons"></div>
+<div class="filters" id="filters"></div>
+<div id="tabContent"></div>
+
+<div id="updateModal" class="modal">
+  <div class="modal-content">
+    <h3>Updates for Task: <span id="modalTaskID"></span></h3>
+    <div id="updatesList" style="max-height:300px; overflow-y:auto; margin-bottom:10px;"></div>
+    <label>Author: 
+      <select id="updateAuthor"></select> or 
+      <input type="text" id="manualAuthor" placeholder="Your name">
+    </label><br><br>
+    <textarea id="updateMessage" placeholder="Enter comment..." rows="3" style="width:100%; background:#222; color:#fff;"></textarea><br><br>
+    <button class="btn" onclick="addUpdate()">Add Comment</button>
+    <button class="btn" onclick="closeModal()">Close</button>
+  </div>
+</div>
+
+<script>
+const SHEET_ID = "1GyvpnccBQF0AXroVtncqMMcyTQL70quOBq9MktIUf2s";
+let tabs = ["Projects","Tasks","People","Files","Updates","Instructions"];
+let sheetData = {};  
+let currentTab = "Tasks";
+
+async function fetchSheet(tab) {
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${tab}`;
+  const res = await fetch(url);
+  const text = await res.text();
+  const json = JSON.parse(text.match(/.*google\.visualization\.Query\.setResponse\((.*)\);/s)[1]);
+  return json.table.rows.map(r => r.c.map(c => c ? c.v : ""));
+}
+
+async function loadData(){
+  for(const tab of tabs){
+    sheetData[tab] = await fetchSheet(tab);
+  }
+  renderTabs();
+  showTab(currentTab);
+  populateAuthors();
+  renderFilters();
+}
+
+function renderTabs(){
+  const container = document.getElementById("tabButtons");
+  container.innerHTML = "";
+  tabs.forEach(tab=>{
+    const btn = document.createElement("button");
+    btn.textContent = tab;
+    btn.onclick = ()=>showTab(tab);
+    if(tab===currentTab) btn.classList.add("active");
+    container.appendChild(btn);
+  });
+}
+
+function showTab(tab){
+  currentTab = tab;
+  document.querySelectorAll("#tabButtons button").forEach(b=>b.classList.remove("active"));
+  [...document.querySelectorAll("#tabButtons button")].find(b=>b.textContent===tab).classList.add("active");
+  const content = document.getElementById("tabContent");
+  content.innerHTML = "";
+
+  if(tab==="Updates"){
+    sheetData[tab].forEach(u=>{
+      const div = document.createElement("div");
+      div.style.borderBottom="1px solid #333"; div.style.padding="4px";
+      div.textContent = `[${u[0]||""}] Project:${u[1]||""}, Author:${u[2]||""}, ${u[3]||""}`;
+      content.appendChild(div);
+    });
+    return;
+  }
+
+  if(tab==="Instructions"){
+    sheetData[tab].forEach(u=>{
+      const p = document.createElement("p"); p.textContent = u[0]||""; content.appendChild(p);
+    });
+    return;
+  }
+
+  const table = document.createElement("table");
+  const thead = document.createElement("thead");
+  const trh = document.createElement("tr");
+  sheetData[tab][0].forEach((v,i)=>{
+    const th = document.createElement("th");
+    th.textContent=v||"";
+    if(i===0) th.classList.add("small-cell");
+    if(i===1) th.classList.add("small-cell");
+    if(i===2 && tab==="Tasks") th.classList.add("task-name-cell");
+    trh.appendChild(th);
+  });
+  if(tab==="Tasks"){
+    const th = document.createElement("th"); th.textContent="Actions"; trh.appendChild(th);
+  }
+  thead.appendChild(trh);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  for(let i=1;i<sheetData[tab].length;i++){
+    const row = sheetData[tab][i];
+    const tr = document.createElement("tr");
+    row.forEach((cell,j)=>{
+      const td = document.createElement("td");
+      td.innerHTML = cell || "";
+      if(tab==="Tasks"){
+        if(j===3 || j===4){
+          td.innerHTML="";
+          const sel = document.createElement("select");
+          sheetData["People"].forEach(p=>{
+            const opt = document.createElement("option"); opt.value=p[0]; opt.textContent=p[0]; if(cell===p[0]) opt.selected=true; sel.appendChild(opt);
+          });
+          td.appendChild(sel);
+        }
+        if(j===5){
+          td.innerHTML="";
+          const sel = document.createElement("select");
+          ["To Do","In Progress","Done","Not Relevant","Overdue"].forEach(s=>{
+            const opt=document.createElement("option"); opt.value=s; opt.textContent=s; if(s===cell) opt.selected=true; sel.appendChild(opt);
+          });
+          td.appendChild(sel);
+          sel.onchange = ()=>{ tr.classList.toggle("not-relevant", sel.value==="Not Relevant"); };
+        }
+        if(j===6){
+          td.innerHTML="";
+          const sel=document.createElement("select");
+          ["High","Medium","Low"].forEach(p=>{
+            const opt=document.createElement("option"); opt.value=p; opt.textContent=p; if(p===cell) opt.selected=true; sel.appendChild(opt);
+          });
+          td.appendChild(sel);
+        }
+        if(j===7){
+          td.innerHTML="";
+          const inp=document.createElement("input"); inp.type="date"; inp.value=cell||""; td.appendChild(inp);
+        }
+        if(j===8){
+          td.innerHTML=`<a href="${cell||'https://google.com'}" target="_blank">${cell||'https://google.com'}</a>`;
+        }
+        if(j===9){
+          td.innerHTML=cell||""; td.style.cursor="pointer"; td.onclick=()=>openModal(row[0]);
+        }
+      }
+      if(tab==="People" && j>=1 && cell){ td.innerHTML=`<a href="${cell}" target="_blank">${cell}</a>`; }
+      tr.appendChild(td);
+    });
+    if(tab==="Tasks"){
+      const td = document.createElement("td");
+      const btn=document.createElement("button"); btn.className="btn"; btn.textContent="Delete";
+      btn.onclick=()=>{ if(confirm("Are you sure to delete this task?")) tr.remove(); };
+      td.appendChild(btn); tr.appendChild(td);
+    }
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  content.appendChild(table);
+}
+
+function renderFilters(){
+  const f=document.getElementById("filters"); f.innerHTML="";
+  if(currentTab!=="Tasks") return;
+  ["Project","Status","Owner","Reviewer","Priority"].forEach((field,i)=>{
+    const lbl=document.createElement("label"); lbl.textContent=field+": ";
+    const sel=document.createElement("select");
+    const vals=new Set(sheetData["Tasks"].slice(1).map(r=>r[i+1]));
+    sel.innerHTML="<option value=''>All</option>";
+    vals.forEach(v=>{ const opt=document.createElement("option"); opt.value=v; opt.textContent=v; sel.appendChild(opt); });
+    sel.onchange=()=>showTab(currentTab);
+    lbl.appendChild(sel); f.appendChild(lbl);
+  });
+}
+
+function populateAuthors(){
+  const sel=document.getElementById("updateAuthor"); sel.innerHTML="";
+  sheetData["People"].forEach(p=>{
+    const opt=document.createElement("option"); opt.value=p[0]; opt.textContent=p[0]; sel.appendChild(opt);
+  });
+}
+
+let currentTaskID=null;
+function openModal(taskID){
+  currentTaskID=taskID;
+  document.getElementById("modalTaskID").textContent=taskID;
+  const list=document.getElementById("updatesList"); list.innerHTML="";
+  sheetData["Updates"].filter(u=>u[0]==taskID).forEach(u=>{
+    const div=document.createElement("div"); div.textContent=`[${u[3]}] Project:${u[1]}, Author:${u[2]}, ${u[3]}`; list.appendChild(div);
+  });
+  document.getElementById("updateModal").style.display="block";
+}
+function closeModal(){ document.getElementById("updateModal").style.display="none"; }
+function addUpdate(){
+  const author=document.getElementById("manualAuthor").value || document.getElementById("updateAuthor").value;
+  const msg=document.getElementById("updateMessage").value;
+  if(!author||!msg) return alert("Enter author and message");
+  sheetData["Updates"].push([currentTaskID,"Project",author,msg]);
+  document.getElementById("updateMessage").value=""; openModal(currentTaskID);
+}
+
+loadData();
+</script>
+</body>
+</html>
